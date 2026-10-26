@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GPT Remover - AI Background Remover</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f5f6fb;color:#202338;font-family:Arial,sans-serif}
+header{padding:20px 6%;background:white;border-bottom:1px solid #eee}
+.logo{font-size:25px;font-weight:bold;color:#5545e8}
+.hero{text-align:center;padding:35px 15px 20px}
+h1{font-size:clamp(30px,5vw,46px);margin:10px 0}
+.hero p{color:#6c7182;line-height:1.6}
+main{max-width:850px;margin:0 auto;padding:15px}
+.panel{background:white;border-radius:18px;padding:22px;box-shadow:0 8px 35px #1820440d}
+.upload{display:block;text-align:center;padding:30px 12px;border:2px dashed #aaa4ff;border-radius:14px;cursor:pointer;background:#fafaff}
+.upload strong{display:block;font-size:19px;margin:12px}
+button{border:0;border-radius:10px;padding:13px 17px;background:#5545e8;color:white;font-size:15px;cursor:pointer}
+button:disabled{opacity:.5;cursor:wait}
+button:hover:not(:disabled){filter:brightness(.94)}
+.preview{display:none;margin-top:20px;min-height:220px;align-items:center;justify-content:center;overflow:hidden;background-color:#ffffff;background-image:linear-gradient(45deg,#ddd 25%,transparent 25%),linear-gradient(-45deg,#ddd 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#ddd 75%),linear-gradient(-45deg,transparent 75%,#ddd 75%);background-size:20px 20px;background-position:0 0,0 10px,10px -10px,-10px 0}
+.preview img{display:block;max-width:100%;max-height:470px;object-fit:contain}
+.controls{display:none;margin-top:20px}
+.actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:15px}
+input[type=color]{width:52px;height:38px;vertical-align:middle;border:0;cursor:pointer}
+#status{margin-top:15px;color:#5545e8;font-size:14px;line-height:1.6}
+.note{font-size:13px;color:#73788a;line-height:1.6;margin-top:20px}
+footer{text-align:center;padding:25px;color:#777;font-size:13px}
+</style>
+</head>
+<body>
+<header><div class="logo">✦ GPT Remover</div></header>
+
+<section class="hero">
+<h1>Remove Background <span style="color:#5545e8">with AI</span></h1>
+<p>Photo upload karo, background hatao aur apna colour lagao.</p>
+</section>
+
+<main>
+<div class="panel">
+<label class="upload" for="file">
+<div style="font-size:42px">☁️</div>
+<strong>Upload Your Image</strong>
+<span>Yahan click karke apni photo select karo</span>
+</label>
+<input id="file" type="file" accept="image/*">
+
+<div class="preview" id="preview">
+<img id="photo" alt="Processed photo">
+</div>
+
+<div class="controls" id="controls">
+<p><b>Background Colour:</b>
+<input type="color" id="bg" value="#7b3f98">
+</p>
+
+<div class="actions">
+<button id="remove">✂ Remove Background</button>
+<button id="download">⬇ Download Photo</button>
+<button id="transparent" style="background:#16805d">Transparent PNG</button>
+<button id="reset" style="background:#687086">New Photo</button>
+</div>
+</div>
+
+<div id="status">Photo select karke shuru karo.</div>
+<p class="note">AI model pehli baar internet se download hoga. Processing tumhare browser mein hoti hai. Photo ka background remove karne ke baad apna colour choose karo.</p>
+</div>
+</main>
+
+<footer>© 2026 GPT Remover</footer>
+
+<script type="module">
+import { removeBackground as imglyRemoveBackground } from "https://esm.sh/@imgly/background-removal@1.7.0";
+
+const file = document.getElementById("file");
+const photo = document.getElementById("photo");
+const preview = document.getElementById("preview");
+const controls = document.getElementById("controls");
+const bg = document.getElementById("bg");
+const status = document.getElementById("status");
+const removeBtn = document.getElementById("remove");
+
+let originalFile = null;
+let foregroundBlob = null;
+let originalURL = null;
+let foregroundURL = null;
+let busy = false;
+
+function showStatus(message) {
+  status.textContent = message;
+}
+
+function showPhoto() {
+  if (!foregroundBlob) return;
+  photo.src = foregroundURL;
+  preview.style.backgroundImage = "none";
+  preview.style.backgroundColor = bg.value;
+}
+
+file.addEventListener("change", () => {
+  const selected = file.files[0];
+  if (!selected) return;
+
+  if (!selected.type.startsWith("image/")) {
+    showStatus("Kripya ek valid image select karo.");
+    return;
+  }
+
+  if (originalURL) URL.revokeObjectURL(originalURL);
+  if (foregroundURL) URL.revokeObjectURL(foregroundURL);
+
+  originalFile = selected;
+  foregroundBlob = null;
+  foregroundURL = null;
+  originalURL = URL.createObjectURL(selected);
+
+  photo.src = originalURL;
+  preview.style.display = "flex";
+  preview.style.backgroundImage = "";
+  preview.style.backgroundColor = "#eeeeee";
+  controls.style.display = "block";
+  removeBtn.disabled = false;
+
+  showStatus("Photo upload ho gayi. Ab Remove Background dabao.");
+});
+
+removeBtn.addEventListener("click", async () => {
+  if (!originalFile || busy) return;
+
+  busy = true;
+  removeBtn.disabled = true;
+  showStatus("AI load ho raha hai. Pehli baar thoda samay lag sakta hai...");
+
+  try {
+    foregroundBlob = await imglyRemoveBackground(originalFile, {
+      model: "isnet_quint8",
+      output: { format: "image/png", type: "foreground" },
+      progress: (key, current, total) => {
+        if (total > 0) {
+          showStatus(
+            "AI processing: " +
+            Math.round(current / total * 100) + "%"
+          );
+        }
+      }
+    });
+
+    if (foregroundURL) URL.revokeObjectURL(foregroundURL);
+    foregroundURL = URL.createObjectURL(foregroundBlob);
+    showPhoto();
+    showStatus("Background remove ho gaya! Ab colour choose karo.");
+  } catch (error) {
+    console.error(error);
+    showStatus("AI load nahi hua. Internet check karo aur page reload karke dobara try karo.");
+  } finally {
+    busy = false;
+    removeBtn.disabled = false;
+  }
+});
+
+bg.addEventListener("input", () => {
+  preview.style.backgroundImage = "none";
+  preview.style.backgroundColor = bg.value;
+});
+
+document.getElementById("download").addEventListener("click", async () => {
+  if (!foregroundBlob) {
+    showStatus("Pehle Remove Background dabao.");
+    return;
+  }
+
+  try {
+    const img = new Image();
+    img.src = foregroundURL;
+    await img.decode();
+
+    const canvas = document.createElement("canvas");
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = bg.value;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0);
+
+    canvas.toBlob(blob => {
+      if (!blob) {
+        showStatus("Image save nahi ho paayi.");
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "gpt-remover.png";
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      showStatus("Photo download ho gayi!");
+    }, "image/png");
+  } catch (error) {
+    showStatus("Download nahi ho paaya. Dobara try karo.");
+  }
+});
+
+document.getElementById("transparent").addEventListener("click", () => {
+  if (!foregroundBlob) {
+    showStatus("Pehle AI se background remove karo.");
+    return;
+  }
+
+  const a = document.createElement("a");
+  a.href = foregroundURL;
+  a.download = "gpt-remover-transparent.png";
+  a.click();
+  showStatus("Transparent PNG download shuru ho gayi.");
+});
+
+document.getElementById("reset").addEventListener("click", () => {
+  if (busy) return;
+  file.value = "";
+  originalFile = null;
+  foregroundBlob = null;
+
+  if (originalURL) URL.revokeObjectURL(originalURL);
+  if (foregroundURL) URL.revokeObjectURL(foregroundURL);
+
+  originalURL = null;
+  foregroundURL = null;
+  photo.removeAttribute("src");
+  preview.style.display = "none";
+  controls.style.display = "none";
+  showStatus("Nayi photo select karo.");
+});
+</script>
+</body>
+</html>
